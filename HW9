@@ -16,71 +16,90 @@ or if you have access to a non-student version of Arena, you can use λ1 = 50 to
 """
 
 #import packages
-
-pip install simpy
 import random
 import simpy
 
-##system constraints
+# System constraints
 NUM_SERV = 5                    # number of servers
 NUM_SCAN = 10                   # number of scanners
 
-#rates
-ARRIVAL_RATE = 5               # passengers per minute
-SERVICE_RATE = 0.75            # mean service time
-SCANNERTIME_MIN = 0.5          # minimum time for personal scanner in minutes
-SCANNERTIME_MAX = 1            # maximum time for personal scanner in minutes
-T_INTER = 0.2                  # exponential distribution with mean = 0.2 minutes
+# Rates
+ARRIVAL_RATE = 5                # passengers per minute
+SERVICE_RATE = 0.75             # mean service time
+SCANNERTIME_MIN = 0.5           # minimum time for personal scanner in minutes
+SCANNERTIME_MAX = 1             # maximum time for personal scanner in minutes
+T_INTER = 7                     # Create a passenger every ~7 minutes
+SIM_TIME = 20                   # Simulation time in minutes
 
-#simulation time
-SIM_TIME = 100                 # simulation time in minutes
+class AirportSecuritySystem:
+    """An airport security system with a limited number of servers and scanners."""
 
-
-class Airport(object):
-    
-  def _init_(self, env):
+    def __init__(self, env, num_serv, num_scan):
         self.env = env
+        self.servers = simpy.Resource(env, capacity=num_serv)
+        self.scanners = [simpy.Resource(env, capacity=1) for _ in range(num_scan)]
 
-        # set servers as resource
-        self.servers = simpy.Resource(env, capacity=NUM_SERV)
-
-        # set scanners as resources
-        self.scanners = [simpy.Resource(env, capacity=1) for _ in range(NUM_SCAN)]
-
-
-def id_check(self, passenger):
+    def id_check(self, passenger):
+        """The ID check process."""
+        start_time = self.env.now
         yield self.env.timeout(random.expovariate(1 / SERVICE_RATE))
+        wait_time = self.env.now - start_time
+        print(f'Passenger {passenger} waited for ID check for {wait_time:.2f} minutes.')
 
-
-def personal_check(self, passenger):
+    def personal_check(self, passenger):
+        """The personal check process."""
+        start_time = self.env.now
         yield self.env.timeout(random.uniform(SCANNERTIME_MIN, SCANNERTIME_MAX))
+        wait_time = self.env.now - start_time
+        print(f'Passenger {passenger} waited for personal check for {wait_time:.2f} minutes.')
 
-
-def passenger_generator(env, airport):
-    passenger_id = 0
-    while True:
-        yield env.timeout(random.expovariate(1 / ARRIVAL_RATE))
-        passenger_id += 1
-        env.process(passenger(env, passenger_id, airport))
-
-
-def passenger(env, passenger_id, airport):
+def passenger(env, name, airport):
+    """A passenger process arrives at the airport and goes through the security process."""
+    print(f'{name} arrives at the airport at {env.now:.2f}.')
     with airport.servers.request() as request:
         yield request
-        yield env.process(airport.id_check(passenger_id))
+        print(f'{name} starts ID check at {env.now:.2f}.')
+        yield env.process(airport.id_check(name))
+        print(f'{name} ID check finished at {env.now:.2f}.')
 
     # Choose the shortest personal check queue
     chosen_scanner = min(airport.scanners, key=lambda s: len(s.queue))
     with chosen_scanner.request() as request:
         yield request
-        yield env.process(airport.personal_check(passenger_id))
+        print(f'{name} starts personal check at {env.now:.2f}.')
+        yield env.process(airport.personal_check(name))
+        print(f'{name} personal check finished at {env.now:.2f}.')
 
-def run_simulation():
-    env = simpy.Environment()
-    airport = Airport(env)
-    env.process(passenger_generator(env, airport))
-    env.run(until=SIM_TIME)
+def passenger_generator(env, airport):
+    """Generate passengers arriving at the airport."""
+    passenger_count = 0
+    while True:
+        yield env.timeout(random.expovariate(1 / ARRIVAL_RATE))
+        passenger_count += 1
+        env.process(passenger(env, f'Passenger {passenger_count}', airport))
 
-# main function
-if __name__ == "__main__":
-    run_simulation()
+def setup(env, num_serv, num_scan, t_inter):
+    """Create the airport security system and generate initial passengers."""
+    airport = AirportSecuritySystem(env, num_serv, num_scan)
+
+    # Generate initial passengers
+    passenger_count = 0
+    while True:
+        yield env.timeout(random.randint(t_inter - 2, t_inter + 2))
+        passenger_count += 1
+        env.process(passenger(env, f'Passenger {passenger_count}', airport))
+
+# Setup and start the simulation
+print('Airport Security System')
+print('Simulation started...\n')
+
+random.seed()  # Use current system time as seed for random number generation
+
+# Create an environment and start the setup process
+env = simpy.Environment()
+env.process(setup(env, NUM_SERV, NUM_SCAN, T_INTER))
+
+# Execute the simulation
+env.run(until=SIM_TIME)
+
+print('\nSimulation completed.')
