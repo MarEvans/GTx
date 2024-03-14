@@ -1,0 +1,86 @@
+"""
+
+In this problem you, can simulate a simplified airport security system at a busy airport. Passengers arrive
+according to a Poisson distribution with λ1 = 5 per minute (i.e., mean interarrival rate µ1 = 0.2 minutes)
+to the ID/boarding-pass check queue, where there are several servers who each have exponential
+service time with mean rate µ2 = 0.75 minutes. [Hint: model them as one block that has more than one
+resource.] After that, the passengers are assigned to the shortest of the several personal-check queues,
+where they go through the personal scanner (time is uniformly distributed between 0.5 minutes and 1
+minute).
+
+Use the Arena software (PC users) or Python with SimPy (PC or Mac users) to build a simulation of the
+system, and then vary the number of ID/boarding-pass checkers and personal-check queues to
+determine how many are needed to keep average wait times below 15 minutes. [If you’re using SimPy,
+or if you have access to a non-student version of Arena, you can use λ1 = 50 to simulate a busier airport.]
+
+"""
+
+#import packages
+
+pip install simpy
+import random
+import simpy
+
+##system constraints
+NUM_SERV = 5                    # number of servers
+NUM_SCAN = 10                   # number of scanners
+
+#rates
+ARRIVAL_RATE = 5               # passengers per minute
+SERVICE_RATE = 0.75            # mean service time
+SCANNERTIME_MIN = 0.5          # minimum time for personal scanner in minutes
+SCANNERTIME_MAX = 1            # maximum time for personal scanner in minutes
+T_INTER = 0.2                  # exponential distribution with mean = 0.2 minutes
+
+#simulation time
+SIM_TIME = 100                 # simulation time in minutes
+
+
+class Airport(object):
+    
+  def _init_(self, env):
+        self.env = env
+
+        # set servers as resource
+        self.servers = simpy.Resource(env, capacity=NUM_SERV)
+
+        # set scanners as resources
+        self.scanners = [simpy.Resource(env, capacity=1) for _ in range(NUM_SCAN)]
+
+
+def id_check(self, passenger):
+        yield self.env.timeout(random.expovariate(1 / SERVICE_RATE))
+
+
+def personal_check(self, passenger):
+        yield self.env.timeout(random.uniform(SCANNERTIME_MIN, SCANNERTIME_MAX))
+
+
+def passenger_generator(env, airport):
+    passenger_id = 0
+    while True:
+        yield env.timeout(random.expovariate(1 / ARRIVAL_RATE))
+        passenger_id += 1
+        env.process(passenger(env, passenger_id, airport))
+
+
+def passenger(env, passenger_id, airport):
+    with airport.servers.request() as request:
+        yield request
+        yield env.process(airport.id_check(passenger_id))
+
+    # Choose the shortest personal check queue
+    chosen_scanner = min(airport.scanners, key=lambda s: len(s.queue))
+    with chosen_scanner.request() as request:
+        yield request
+        yield env.process(airport.personal_check(passenger_id))
+
+def run_simulation():
+    env = simpy.Environment()
+    airport = Airport(env)
+    env.process(passenger_generator(env, airport))
+    env.run(until=SIM_TIME)
+
+# main function
+if __name__ == "__main__":
+    run_simulation()
