@@ -1,0 +1,226 @@
+library(forecast)
+library(ggplot2)
+
+#read in data
+temps.data <- read.csv("temps.txt", header = TRUE, sep = "")
+
+#fix the column names
+colnames(temps.data)<-c("Day",seq(1996,2015))
+
+#Perform time series decomposition to identify trend, seasonality, and residual components.
+temps.vec <- as.vector(unlist(temps.data[,2:21]))
+
+# Create a time series object
+ts_data <- ts(temps.vec, start = 1996, frequency = 123) # specify n observations per unit of time
+
+#visualize time series data
+plot.ts(ts_data)
+
+# Time series decomposition
+decomp_ts <- decompose(ts_data)
+plot(decomp_ts)
+
+# Apply Holt-Winters method
+#Single Exponential
+hw_a1 <- HoltWinters(ts_data, alpha=NULL, beta=F, gamma=F, seasonal = "additive") #optimize hyperparameters
+hw_m1 <- HoltWinters(ts_data, alpha=NULL, beta=F, gamma=F, seasonal = "multiplicative")
+
+#Compare smoothing parameters for additive vs multiplicative
+comp_smooth_param1<- as.data.frame(cbind(hw_a1$alpha, hw_m1$alpha))
+row.names(comp_smooth_param1)<- c("alpha")
+colnames(comp_smooth_param1)<- c("Additive", "Multiplicative")
+comp_smooth_param1
+
+#Double Exponential- alpha/gamma
+hw_a2 <- HoltWinters(ts_data, alpha=NULL, beta=F, gamma=NULL, seasonal = "additive")#optimize hyperparameters
+hw_m2 <- HoltWinters(ts_data, alpha=NULL, beta=F, gamma=NULL, seasonal = "multiplicative")
+
+#Compare smoothing parameters for additive vs multiplicative
+smooth_param_a2<- as.data.frame(append(hw_a2$alpha, hw_a2$beta))
+smooth_param_m2<- as.data.frame(append(hw_m2$alpha, hw_m2$beta))
+comp_smooth_param2<- cbind(smooth_param_a2,smooth_param_m2)
+row.names(comp_smooth_param2)<- c("alpha", "beta")
+colnames(comp_smooth_param2)<- c("Additive", "Multiplicative")
+comp_smooth_param2
+
+#Triple Exponential
+hw_a3 <- HoltWinters(ts_data, alpha=NULL, beta=NULL, gamma=NULL, seasonal = "additive") #optimize hyperparameters
+hw_m3 <- HoltWinters(ts_data, alpha=NULL, beta=NULL, gamma=NULL, seasonal = "multiplicative")
+
+#Compare smoothing parameters for additive vs multiplicative
+smooth_param_a3<- as.data.frame(append(hw_a3$alpha, hw_a3$beta, hw_a3$gamma))
+smooth_param_m3<- as.data.frame(append(hw_m3$alpha, hw_m3$beta, hw_m3$gamma))
+comp_smooth_param3<- cbind(smooth_param_a3,smooth_param_m3)
+row.names(comp_smooth_param3)<- c("alpha", "beta", "gamma")
+colnames(comp_smooth_param3)<- c("Additive", "Multiplicative")
+
+#additive models SSE
+hw_a1$SSE
+hw_a2$SSE
+hw_a3$SSE
+
+#multiplicative models SSE
+hw_m1$SSE
+hw_m2$SSE
+hw_m3$SSE
+
+## Double Exponential Smoothing Additive model
+#plot fitted values
+plot(hw_a2$fitted)
+comp_smooth_param3
+
+## CUSUM
+#create data frame
+hw_d<- as.data.frame(matrix(hw_a2$fitted[,1], nrow=123))
+
+#add the dates back in
+hw_d<- cbind(temps.data[,1],hw_d)
+
+#add a column to the dataframe with the average temp for each day
+hw_d<-cbind(hw_d, rowMeans(hw_d[,-1]))
+
+#fix column names
+colnames(hw_d)<- c("Day",colnames(temps.data[,3:21]), "Avg")
+
+#add new column for set of St values
+hw_d[,"St"]<- NA
+
+#calculate hyperparameters
+Mu <- mean(hw_d$Avg)
+C <-sd(hw_d$Avg)
+T <- 3*C
+
+#print
+cat("Mu =", Mu, " ")
+cat("C=", C, " ")
+cat("Threshold =", T)
+
+#initialize list for results
+exceed_threshold <- c()
+
+#initialize list for St values from each iteration
+st_cusum <- c()
+
+#loop through columns (years)
+for (j in 2:(ncol(hw_d) - 2)) {
+  hw_d[1, "St"] <- 0  # Set initial St value to 0
+
+# Loop through each row to calculate St values
+    for (i in 2:nrow(hw_d)) {
+      hw_d[i, "St"] <- max(0, hw_d[i - 1, "St"] + Mu - hw_d[i, j] - C)
+      st_cusum<- append(st_cusum, hw_d$St) #save all St values
+
+# Check if St > T and store the day at that index
+        if (hw_d[i, "St"] > T) {
+          exceed_threshold <- append(exceed_threshold,hw_d[i, "Day"])
+          break #stop after first instance
+        }
+      }
+}
+
+#list days that exceed threshold
+exceed_threshold
+
+#choose data from one year
+hw_d$St<- st_cusum[862:984]
+
+#change "day" data type from <char> to <date>
+hw_d$Day<-as.Date(hw_d$Day, "%d-%b")
+
+#plot cusum: 2004
+ggplot(hw_d, aes(Day, St, groups = 2))+
+
+geom_line(color="blue", size = .3)+
+
+#horizontal line at threshold (T)
+geom_hline(yintercept = T, linetype = "dashed")+
+
+ylab("CUSUM (St)")+
+ggtitle("CUSUM Chart: 2004")
+
+##Repeat with seasonality fitted values
+
+#create data frame
+seas_d<- as.data.frame(matrix(hw_a2$fitted[,3], nrow=123))
+
+#add a column to the dataframe with the average temp for each day
+seas_d<-cbind(seas_d, rowMeans(seas_d[,-1]))
+
+#add the dates back in
+seas_d<- cbind(temps.data[,1],seas_d)
+
+#fix column names
+colnames(seas_d)<- c("Day",colnames(temps.data[,3:21]), "Avg")
+
+#add new column for set of St values
+seas_d[,"St"]<- NA
+
+#view first 5 rows
+seas_d[1:5,]
+
+#calculate hyperparameters
+Mu2 <- mean(seas_d$Avg)
+C2 <-sd(seas_d$Avg)*0.5
+T2 <- 2*C2
+
+#print
+cat("Mu (2) =", Mu2, " ")
+cat("C (2) =", C2, " ")
+cat("Threshold (2) =", T2)
+
+#initialize list for results
+exceed_threshold2 <- c()
+
+#initialize list for St values from each iteration
+st_cusum2 <- c()
+
+#loop through columns (years)
+for (j in 2:(ncol(seas_d) - 2)) {
+  seas_d[1, "St"] <- 0 # Set initial St value to 0
+
+# Loop through each row to calculate St values
+    for (i in 2:nrow(seas_d)) {
+      seas_d[i, "St"] <- max(0, seas_d[i - 1, "St"] + Mu2 - seas_d[i, j] - C2)
+      st_cusum2<- append(st_cusum2, seas_d$St) #save all St values
+
+# Check if St > T and store the day at that index
+        if (seas_d[i, "St"] > T2) {
+        exceed_threshold2 <- append(exceed_threshold2,seas_d[i, "Day"])
+        break #stop after first instance
+        }
+    }
+}
+
+#list days that exceed threshold
+exceed_threshold2
+
+#choose data from one year
+seas_d$St<- st_cusum2[862:984]
+
+#change "day" data type from <char> to <date>
+seas_d$Day<-as.Date(seas_d$Day, "%d-%b")
+
+#plot cusum: 2004
+ggplot(seas_d, aes(Day, St, groups = 2))+
+
+geom_line(color="red", size = .3)+
+
+#horizontal line at threshold (T)
+geom_hline(yintercept = T2, linetype = "dashed")+
+
+ylab("CUSUM (St)")+
+ggtitle("CUSUM Chart: 2004")
+
+#choose data from one year
+seas_d$St<- st_cusum2[213406:213528]
+
+#plot cusum: 2015
+ggplot(seas_d, aes(Day, St, groups = 2))+
+
+geom_line(color="dark green", size = .3)+
+
+#horizontal line at threshold (T)
+geom_hline(yintercept = T2, linetype = "dashed")+
+
+ylab("CUSUM (St)")+
+ggtitle("CUSUM Chart: 2015")
