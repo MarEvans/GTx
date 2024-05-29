@@ -1,0 +1,15 @@
+#create empty vector
+factor_names <- character(10)
+
+#assign factor names dynamically
+for (i in 1:10) {
+  factor_names[i] <- paste("Feature", i, sep = " ")
+}
+
+#generate the design df
+design <- FrF2(16, 10, default.levels = c("Yes", "No")) #change -1/1 output to Yes/No
+
+#set factor names
+colnames(design)<- factor_names
+
+design
