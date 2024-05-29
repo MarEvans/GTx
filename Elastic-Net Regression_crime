@@ -1,0 +1,29 @@
+### Elastic Net is a regularization technique that combines both L1 (LASSO) and L2 (ridge) penalties in a linear
+regression model. The elastic-net penalty, which controls the balance between L1/L2 penalties, is denoted by alpha
+
+
+#perform Elastic Net
+results <- data.frame(c=integer(), lambda = double(), mse = double())
+
+c <- 20
+
+#iterate over range of alphas- evaluate corresponding lamda/MSE values
+
+for (i in 1:c) {
+  elastic <- cv.glmnet(x=as.matrix(data[,-16]),
+                      y=as.matrix(data[,16]),
+                      alpha = i/c,
+                      family = "gaussian",
+                      standardized = TRUE)
+  it<- data.frame (a=i/c, lambda = elastic$lambda.min,
+                  mse= elastic$cvm[elastic$lambda == elastic$lambda.min])
+  results <-rbind(results, it)
+}
+
+as.data.frame(results)
+
+#plot alpha values/MSE
+plot(results$a, results$mse, ylab="mse", xlab="a values", type = 'b')
+
+#view coefficients
+coefficients(elastic,elastic$lambda.min)
