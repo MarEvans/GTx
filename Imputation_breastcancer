@@ -1,0 +1,174 @@
+#read in the data
+data <- read.csv("breast-cancer-wisconsin.data.txt", header = FALSE)
+
+head(data)
+
+#replace ? with na
+data <- replace_with_na(data, replace = list(V7 = "?"))
+
+#transform data type from char to int
+data<-transform(data, V7 = as.integer(V7))
+
+#visualize missing data
+aggr(data, col=c('lightgray','red'),numbers=TRUE, sortVars=TRUE,
+labels=names(data), cex.axis=.7,gap=3, ylab=c("Missing data","Pattern"))
+
+
+#new df of data for mean imputation (keep the og unaltered)
+imp_mean <- data
+
+#calculate mean of variable
+m <- round(mean(as.integer(data$V7), na.rm = TRUE)) #round
+
+#mean imputation
+imp_mean[ri.mdp,7] <- m
+
+#change data type to int
+imp_mean<- transform(imp_mean, V7 = as.integer(V7))
+
+#check
+imp_mean[ri.mdp,7]
+
+#secondary check: print the number of previously missing points that now equal rounded mean
+cat("Number of missing values replaced by mean:", length(which(imp_mean[ri.mdp,7]== m)))
+
+#extract mode
+mode<- which.max(data[-ri.mdp,7])
+
+#mode imputation
+imp_mode <- data #create df
+imp_mode[ri.mdp,7] <- mode
+
+#check
+imp_mode[ri.mdp,7]
+
+#impute na values using regression
+imp_reg <- mice(data, method = "norm.predict", m=1, seed = 128)
+
+#view the imputed values
+reg<-imp_reg$imp$V7
+reg
+
+#create df with all data
+reg_data<- data
+
+#add imputed values from regression
+reg_data[ri.mdp,7]<-round(reg) #round
+
+#impute na values using regression with perturbation
+imp_per <- mice(data, method = "norm.nob", m=1, seed = 821)
+
+#view imputed values
+per<- imp_per$imp$V7
+per
+
+#create df with all data
+per_data<- data
+
+#add values from regression with perturbation
+per_data[ri.mdp,7]<-round(per) #round
+per_data[159,7]<-0 #replace negative number with 0
+
+allvalues <- data.frame(
+imp_mean[ri.mdp,7],
+reg_data[ri.mdp,7],
+per_data[ri.mdp,7])
+allvalues
+
+#create function to partition data into train/test sets
+partition <- function(data, size = 0.8, train = TRUE){
+                      nrow = nrow(data)
+                      total_row = size * nrow #use 80% of data
+                      train_sample <- 1:total_row
+                        if (train==TRUE){
+                          return(data[train_sample,]) #if train parameter is true, return training set
+                        }
+                        else {
+                          return(data[-train_sample,]) #if train parameter is false, return test set
+                        }
+}
+
+#specify re-sampling method as k-fold cross-validation
+cntrl <- trainControl(
+  method = "repeatedcv",
+  number =10, #resampling iterations for bootstrapping
+  repeats =3, #repeat 3 times
+  savePredictions = "final", #save predictions from optimal tuning parameters
+)
+
+#Hyperparameter tuning grid
+
+tuneGrid <- expand.grid(
+  kmax = 50,
+  distance = 2,
+  kernel = 'optimal'
+)
+
+## MEAN Imputation- KNN MODEL
+train1<- partition(imp_mean)
+test1<- partition(imp_mean)
+
+#train the model
+knn.mean <- train(as.factor(V11)~.,
+  data = train1,
+  method='kknn',
+  preProcess = c('center','scale'), #center and scale data
+  tuneGrid = tuneGrid,
+  metric="Accuracy",
+  trControl= cntrl)
+
+#predict on test data
+pred1 <- predict(knn.mean, test1)
+
+#calculate accuracy of predictions
+acc <- (sum(pred1==test1[,11])/nrow(test1))*100
+cat("Prediction Accuracy=", acc,"%")
+
+
+
+## Regression Imputation - KNN
+train2<- partition(reg_data)
+test2<- partition(reg_data)
+
+#train the model
+knn.reg <- train(as.factor(V11)~.,
+  data = train2,
+  method='kknn',
+  preProcess = c('center','scale'), #center and scale data
+  tuneGrid = tuneGrid,
+  metric="Accuracy",
+  trControl= cntrl)
+
+#predict on test data
+pred2 <- predict(knn.reg, test2)
+
+#calculate accuracy of predictions
+acc2 <- (sum(pred2==test2[,11])/nrow(test2))*100
+cat("Prediction Accuracy=", acc2,"%")
+
+## Regression with Perturbation Imputation - KKNN
+
+train3<- partition(per_data)
+test3<- partition(per_data)
+
+#train the model
+knn.per <- train(as.factor(V11)~.,
+  data = train3,
+  method='kknn',
+  preProcess = c('center','scale'), #center and scale data
+  tuneGrid = tuneGrid,
+  metric="Accuracy",
+  trControl= cntrl)
+
+#predict on test data
+pred3 <- predict(knn.per, test3)
+
+#calculate accuracy of predictions
+acc3 <- (sum(pred3==test3[,11])/nrow(test3))*100
+cat("Prediction Accuracy=", acc3,"%")
+
+#View results in df
+results<- data.frame(
+  Accuracy = c(acc,acc2,acc3),
+  row.names=c("Mean KNN", "Regression KNN", "Stochastic Regression KNN"))
+print(results)
