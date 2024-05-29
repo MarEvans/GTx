@@ -1,0 +1,107 @@
+#read in data
+crime.data <- read.csv("uscrime.txt",header = TRUE,sep = "")
+
+#apply PCA model
+PCA_c <- prcomp(crime.data[,-16], scale = TRUE) #scale data
+summary(PCA_c)
+
+#get the contributions to each PC
+var <- get_pca_var(PCA_c)
+
+#plot variable contribution
+corrplot(var$contrib, is.corr=FALSE)
+
+#quality of variable representation- factor map
+corrplot(var$cos2, is.corr=FALSE)
+
+#generate Scree plot of eiganvalues
+screepar <-scree(crime.data[,-16], factors=FALSE)
+
+## Component Extraction
+
+#create df of all components
+comp<- PCA_c$x
+
+#pull out the first PC1:PC3
+comp3<- as.data.frame(comp[,1:3])
+
+#view first 10 rows
+comp3[1:10,]
+
+## PC Regression Model
+
+#add crime data to df
+pc_crime<- cbind(comp3,crime.data[,16])
+
+#fix column name for Crime
+colnames(pc_crime)[4] <- "Crime"
+
+#build linear regression model
+lm<-lm(Crime~.,data = pc_crime)
+summary(lm)
+
+#create test vector
+test <- data.frame(M = 14.0, So = 0, Ed = 10.0, Po1 = 12.0, Po2 = 15.5, LF = 0.640, M.F = 94.0, Pop = 150, NW =
+1.1, U1 = 0.120, U2 = 3.6, Wealth = 3200, Ineq = 20.1, Prob = 0.04, Time = 39.0)
+
+#transform test vector
+pred_pc<-as.data.frame(predict(PCA_c, test))
+
+#predict crime rate
+pred_cr<- predict(lm,pred_pc)
+cat("Predicted crime rate =", pred_cr)
+
+## Model in terms of original variables
+
+#df with eigenvectors of the covariance matrix
+rot<- as.matrix(PCA_c$rotation)
+v<-rot[,1:3] #only PC1:PC3
+
+#df with coefficients for PCA regression
+coef<- as.data.frame(lm$coefficients)
+b<-coef[2:4,] #betas
+b0<-coef[1,] #intercept
+
+#implied regression coefficient
+a <- v %*% as.matrix(b) #scaled alphas
+
+#unscale the alpha values
+unscaled_a <- a/sapply(crime.data[,1:15],sd) #divide by sd
+
+#unscale intercept
+unscaled_b0 <- b0 - sum(a*sapply(crime.data[,1:15],mean)/sapply(crime.data[,1:15],sd))
+
+#transpose and view as df
+as.data.frame(t(unscaled_a))
+
+cat("Intercept=",unscaled_b0) #print unscaled intercept
+
+#plug alpha and intercept into the equation and estimate values of all points
+estimates <- as.matrix(crime.data[,1:15])%*% unscaled_a+unscaled_b0
+as.data.frame(estimates[1:5,]) #view first 5 rows
+
+#calculate R-squared and adjusted R-squared
+SSE = sum((estimates - crime.data[,16])^2)
+SStot = sum((crime.data[,16] - mean(crime.data[,16]))^2)
+R2<- 1 - SSE/SStot
+adj_R2<- R2 - (1 - R2)*4/(nrow(crime.data)-4-1)
+cat("R-squared=",R2, " ")
+cat("Adjusted R-squared=",adj_R2)
+
+##Code for comparison table
+
+#create df with values from all linear models
+all_models<- data.frame(
+  Model= c("all predictors", "6 preditors", "PC: 3 dim"),
+  Crime_Prediction = c(155.4349,1304.245,1192.321),
+  Adj_R_squared = c(0.7078,0.7307,0.2208)
+)
+
+#results in a pretty table
+all_models %>%
+  gt()%>%
+    tab_header(
+      title = "Linear Regression Models",
+      subtitle = md("Fit Comparison")
+    )%>%
+  tab_source_note(md("Based on Adusted R-squared, the best model is the Regression Model using `6 predictors`"))
