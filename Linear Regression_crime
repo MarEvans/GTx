@@ -1,0 +1,120 @@
+library(DAAG)
+library(leaps)
+
+#Load data
+crime.data <- read.csv("uscrime.txt",header = TRUE,sep = "")
+
+## Data distribution
+#data range
+range(crime.data$Crime)
+
+#create scatter plot
+plot(crime.data$Crime, ylab="Crime per 100,000", main= "Scatter plot of crime data")
+
+#assess the normality of a dataset
+qqnorm(crime.data$Crime, col = 'steelblue')
+qqline(crime.data$Crime, col = 'dark red', lwd=1, lty = 2)
+
+#fit linear regression model
+lm_1 <-lm(Crime~.,data = crime.data)
+
+#print coefficients for each predictor
+coefficients(lm_1)
+
+#print model summary
+summary(lm_1)
+
+#perform 4-fold CV with linear model
+set.seed(166)
+CV_lm_1<- cv.lm(crime.data, lm_1, m=4, legend.pos= "bottomright")
+
+#compute CV R^2
+# Sum of squares for each fold
+SS_fold <- c(512056.6, 1382466, 1491541, 1065774)
+
+# Calculate SST (Total sum of squares)
+SST <- sum(SS_fold)
+
+# Overall mean square
+ms <- 94719.93
+# Calculate SSE (Residual sum of squares)
+SSE <- SST - ms * 47 # total number of observations over all folds
+
+# Calculate CV R-squared
+CV_R_squared <- 1 - (SSE / SST)
+
+# Print CV R-squared
+print(CV_R_squared)
+
+# explore different combinations of predictors and identify the best subset of predictors for a model
+#Mallows' Cp Criterion
+leaps.c <- leaps(crime.data[,1:15],crime.data$Crime,nbest=2)
+cp_df <- data.frame(Predictors=leaps.c$size,Cp=leaps.c$Cp) #add to dataframe
+round(cp_df,2)
+
+#best subset selection, where best is quantified using RSS
+sub_bic<- regsubsets(crime.data[,1:15],crime.data$Crime, nvmax=15) #fit up to 15 variable model
+full_summary<- summary(sub_bic)
+full_summary
+
+#plot with red dot to indicate smallest BIC statistic
+plot(full_summary$bic, xlab = "Number of Variables", ylab = "BIC", type = "l")
+bic_min = which.min(full_summary$bic) # 6
+points(bic_min, full_summary$bic[bic_min], col = "red", cex = 2, pch = 20)
+
+#pairwise plots of pedictors and dependent variable crime
+par(mfrow = c(2, 3), mar = c(4, 4, 2, 1), oma = c(0, 0, 2, 0))
+with(crime.data, {
+  plot(crime.data$M, crime.data$Crime, ylab="Crime", xlab = "Males 14-24", main = "Crime and Males aged 14–24")
+  plot(crime.data$Ed, crime.data$Crime, ylab="Crime", xlab = "Years of schooling (25yr+)", main = "Crime and Year
+    s of schooling (25yr+)")
+  plot(crime.data$Po1, crime.data$Crime, ylab="Crime", xlab = "$$ on police protection", main = "Crime and Expend
+    iture on police protection")
+  plot(crime.data$U2, crime.data$Crime, ylab="Crime", xlab = "Unemployment (males 35–39yr)", main = "Crime and Un
+    employment rate (males 35–39yr)")
+  plot(crime.data$Prob, crime.data$Crime, ylab="Crime", xlab= "Prob of imprisonment", main = "Crime and Probabili
+    ty of imprisonment")
+  plot(crime.data$Ineq, crime.data$Crime, ylab="Crime", xlab ="Income inequality", main = "Crime and Income inequ
+    ality")
+  mtext("Relationship between 6 Best Predictors and Crime", outer = TRUE)
+})
+
+#fit linear regression model with 6 predictors (M, Ed, Po1, U2, Ineq, Prob)
+lm_2 <-lm(Crime~M+Ed+Po1+U2+Ineq+Prob,data = crime.data)
+
+#print coefficients for each predictor
+coefficients(lm_2)
+
+#model summary
+summary(lm_2)
+
+#perform 4-fold CV with linear model (2)
+set.seed(288)
+CV_lm_2<- cv.lm(crime.data, lm_2, m=4)
+
+#compute CV R^2
+# Extracted information from each fold
+SS_fold2 <- c(334042, 1300449, 261502.7, 369548.5) # Sum of squares
+ms2 <- 48203.02 # Overall mean square
+
+# Calculate SST and SSE
+SST2 <- sum(SS_fold2) # Total sum of squares
+SSE2 <- SST2 - ms2*47
+
+# Calculate CV R-squared
+CV_R_squared2 <- 1 - (SSE2 / SST2)
+
+# Print CV R-squared
+print(CV_R_squared2)
+
+#create test point
+test_p <- data.frame(M = 14.0, So = 0, Ed = 10.0, Po1 = 12.0, Po2 = 15.5, LF = 0.640, M.F = 94.0, Pop = 150, NW =
+1.1, U1 = 0.120, U2 = 3.6, Wealth = 3200, Ineq = 20.1, Prob = 0.04, Time = 39.0)
+
+#model 1- predict crime rate for the test point
+pred_1<- predict(lm_1,test_p)
+cat("Predicted crime rate =", pred_1)
+
+#model 2- predict crime rate with test point (2)
+pred_2<- predict(lm_2,test_p)
+cat("Predicted crime rate =", pred_2)
