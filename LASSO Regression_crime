@@ -1,0 +1,24 @@
+#Perform LASSO
+lasso <- glmnet(x = as.matrix(scaled[,-16]),y = as.matrix(scaled[,16]))
+
+#visualize coefficients
+plot(lasso, label=TRUE)
+
+#cross-validation for optimal LASSO model
+cv.lasso <- cv.glmnet(x = as.matrix(data[,-16]),
+                      y = as.matrix(data[,16]),
+                      alpha = 1,
+                      nfolds = 8,
+                      nlambda = 20,
+                      type.measure = "mse",
+                      family ="gaussian",
+                      standardized = TRUE) #scale
+cv.lasso
+
+cbind(cv.lasso$lambda, cv.lasso$cvm, cv.lasso$nzero)
+
+#coefficients of the model- lambda that resulted in the smallest mean cv error
+coef(cv.lasso, s = "lambda.min")
+
+#plot the cv curve
+plot(cv.lasso)
