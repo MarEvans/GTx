@@ -1,0 +1,51 @@
+
+#build the regression tree model using all data
+tree<-rpart(Crime~., crime.data, method="anova",
+            control = list(minbucket = 5)) #minimum amount of data points required in leaf
+summary(tree)
+
+#plot model
+rpart.plot(tree)
+
+#plot cross-validation error and cost complexity
+plotcp(tree)
+
+#predict crime rate
+pred_t <-predict(tree)
+
+#calculate RMSE and R-squared
+RMSE<-RMSE(pred_t, crime.data$Crime)
+SSE.t <- sum((pred_t - crime.data[,16])^2)
+TSS.t <- sum((crime.data[,16] - mean(crime.data[,16]))^2)
+R2.t <- 1 - SSE.t/TSS.t
+cat("RMSE=",RMSE)
+
+#partition data into train/test sets
+train <- part.training(crime.data, size=0.85,train = TRUE) #85% of data in training set
+test <- part.training(crime.data, size=0.85, train = FALSE) #15% of data in test set
+
+#perform 10-fold cross validation
+ctrl <- trainControl(method = "cv", number = 10)
+
+cv <- train(Crime ~ .,
+            data = train,
+            method = "rpart",
+            trControl = ctrl,
+            )
+cv
+
+#Plot complexity parameter/RMSE
+ggplot(cv)
+
+#plot variable importance
+plot(varImp(cv))
+
+# Prune the model based on the optimal cp value
+tree_pruned <- prune(tree, cp = 0.079 )
+
+#predict crime in test set
+pred_pruned <-predict(tree_pruned)
+SSE.p <- sum((pred_pruned - crime.data[,16])^2)
+TSS.p <- sum((crime.data[,16] - mean(crime.data[,16]))^2)
+R2.p <- 1 - SSE.p/TSS.p
+cat(" R-squared =", R2.p)
