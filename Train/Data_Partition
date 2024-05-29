@@ -1,0 +1,33 @@
+#read in data
+crime.data <- read.csv("uscrime.txt",header = TRUE,sep = "")
+
+## Shuffle data
+set.seed(33)
+
+#generate a random list of indexes
+ind<-sample(1:nrow(crime.data))
+
+#reorder rows according to random indexes
+crime.data<-crime.data[ind, ]
+head(crime.data)
+
+## Partition into train/test sets
+
+part.training <- function(data, size = 0.7, train = TRUE){
+  nrow = nrow(data)
+  total_row = size * nrow #use 70% of data
+  train_sample <- 1:total_row
+    if (train==TRUE){
+      return(data[train_sample,]) #if train parameter is true, return training set
+    }
+    else {
+      return(data[-train_sample,]) #if train parameter is false, return test set
+    }
+}
+
+train<- part.training(crime.data)
+test<- part.training(crime.data, train=FALSE)
+
+#check the dimensions
+dim(train)
+dim(test)
