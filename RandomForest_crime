@@ -1,0 +1,19 @@
+#create baseline random forest model
+forest<- randomForest(Crime~., crime.data, importance=TRUE)
+
+#predict crime rate
+pred_rf<- predict(forest, crime.data[,-16])
+
+
+#plot number of Trees/MSE
+plot(forest, main= "Random Forest: # of Trees and MSE")
+
+#plot variable importance
+varImpPlot(forest)
+
+## Assess model fit
+#compute r-squared
+SSE.rf <- sum((pred_rf - crime.data[,16])^2)
+TSS.rf <- sum((crime.data[,16] - mean(crime.data[,16]))^2)
+R2.rf <- 1 - SSE.rf/TSS.rf
+R2.rf
