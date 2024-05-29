@@ -1,0 +1,55 @@
+library(glmnet)
+
+#read in data
+data <- read.csv("uscrime.txt",header = TRUE,sep = "")
+
+#create df of scaled data
+scaled <- as.data.frame(scale(data))
+
+#initialize linear model including all predictors
+model<- lm(Crime~.,data = scaled)
+
+#perform Stepwise regression
+stepwise<- step(model,
+                scope = list(lower = formula(lm(Crime~1,data = scaled)), #start a0 only
+                upper = formula(lm(Crime~.,data = scaled))),
+                direction = "both") #specify stepwise
+
+
+## Check assumptions of linearity and homoscedasticity
+#plot
+par(mfrow=c(2,2))
+plot(stepwise)
+
+#extract AIC for stepwise
+s.AIC<-extractAIC(stepwise)
+
+#Stepwise final model coefficients
+s.coef<-as.data.frame(stepwise$coefficients)
+s.coef
+
+#perform Forward-selection
+forward<- step(model,
+                scope = list(lower = formula(lm(Crime~1,data = scaled)), #start a0 only
+                upper = formula(lm(Crime~.,data = scaled))),
+                direction = "forward", #specify forward
+                trace = FALSE) #do not print
+
+#extract AIC for forward selection
+f.AIC<-extractAIC(forward)
+
+#Forward selection final model coefficients
+f.coef<-as.data.frame(forward$coefficients)
+f.coef
+
+
+#perform Backward-selection
+backward<- step(model, direction = "backward", #specify backward
+                trace = FALSE) #do not print
+
+#extract AIC for backward selection
+b.AIC<-extractAIC(backward)
+
+#Backward selection final model coefficients
+b.coef<-as.data.frame(backward$coefficients)
+b.coef
