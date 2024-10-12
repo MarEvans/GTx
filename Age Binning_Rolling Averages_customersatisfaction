@@ -1,0 +1,100 @@
+library(ggplot2)
+library(dplyr)
+library(scales)
+library(zoo)
+library(lubridate)
+
+Sales_dataset = read.csv("large_sales_dataset.csv", header=TRUE) #reads data
+Sales_dataset$Product_Category=as.factor(Sales_dataset$Product_Category)
+Sales_dataset$Purchase_Date=as.Date(Sales_dataset$Purchase_Date, format="%m/%d/%Y")
+Sales_dataset$Customer_Gender=as.factor(Sales_dataset$Customer_Gender)
+Sales_dataset$Store_Location=as.factor(Sales_dataset$Store_Location)
+
+head(Sales_dataset)
+
+#Dividing the dataset into training and testing datasets
+testRows_sales = sample(nrow(Sales_dataset),0.2*nrow(Sales_dataset))
+testData_sales = Sales_dataset[testRows_sales, ]
+trainData_sales = Sales_dataset[-testRows_sales, ]
+row.names(trainData_sales) <- NULL
+head(trainData_sales)
+
+#specify cut-off values
+age_breaks <- c(0,18,25,35,45,55,65,75,85,100)
+
+#specify bin labels
+age_labels <- c("0-18","19-25","26-35","36-45","46-55","56-65","66-75","76-85","85-100")
+
+#bin values in Customer_Age variable
+bin_data<-Sales_dataset %>% mutate(age_bin = cut(Customer_Age, 
+                                                 breaks = age_breaks,
+                                                 labels = age_labels))
+
+#group data by Product_Category, Customer_Gender and Customer_Age variables  
+bin_data<- bin_data %>% group_by(age_bin, Customer_Gender, Product_Category) 
+
+#summarise the mean and median values for each group
+bin_data_mean<- bin_data %>% summarise(across(Purchase_Amount,
+                                              list(mean = mean, median = median)))
+tail(bin_data_mean, 15)
+
+#Calculate highest total purchase amount by age group
+bin_data_total <- bin_data %>% 
+  ungroup(Customer_Gender) %>% #selectively ungroup gender since we are only interested in age group
+  summarise(total_purchase = sum(Purchase_Amount), .groups ="drop") %>% #Sum for each age group
+  slice(which.max(total_purchase)) #pull the highest total purchase amount across all categories
+bin_data_total
+
+#Category with the highest average satisfaction score
+Avg_sat <- Sales_dataset %>% group_by(Product_Category) %>% #Group by product category
+  summarise(mean_sat = mean(Satisfaction_Score)) %>% #calculate the mean satisfaction score for each category
+  slice(which.max(mean_sat)) #pull the category with the highest mean satisfaction score
+Avg_sat
+
+## Find the location where electronics were most frequently purchased
+#for each location, count the number of purchases of electronics and arrange in descending order
+count_df<- Sales_dataset %>% group_by(Store_Location) %>% #group by location
+  filter(Product_Category == "Electronics") %>% #filter data- only electronics purchases
+  count(Product_Category,sort = TRUE) #count the number of purchases at each location
+count_df
+
+## Calculate monthly average sales per category
+monthly_sales <- Sales_dataset %>% 
+  #Group data by product category and month
+  group_by(Product_Category,
+           #floor_date will round down 
+           month = lubridate::floor_date(Purchase_Date, 'month')) %>%
+  summarise(monthly_avg = mean(Purchase_Amount)) #calculate average sales per month
+
+head(monthly_sales)
+
+## Plot monthly average sales per category
+ggplot(monthly_sales, aes(x = month, y = monthly_avg)) + 
+  geom_line(na.rm=TRUE) + 
+  geom_point() +
+  facet_wrap(~Product_Category, scales = "free_y") + 
+  xlab("Month") + 
+  ylab("Monthly Average Sales") +
+  scale_x_date(labels = scales::date_format("%b"), breaks = "1 month")
+
+## Calculate rolling means of average monthly sales with a 3 mo. window
+monthly_sales <- monthly_sales %>%
+  group_by(Product_Category) %>%
+  mutate(rolling_avg = zoo::rollmean(monthly_avg,
+                                     k = 3, #3 month window
+                                     fill = NA,
+                                     align = "center" #center alignment
+                                     )
+         )
+monthly_sales$rolling_avg
+
+##plot rolling monthly average sales and monthly average sales by category
+ggplot(monthly_sales, aes(x = month)) + 
+  geom_line(aes(y = monthly_avg, color = "Monthly Average")) + 
+  geom_line(aes(y = rolling_avg, color = "Rolling Average (3-mo)")) +
+  facet_wrap(~Product_Category, scales = "free_y") + 
+  xlab("Month") + 
+  ylab("Sales") +
+  scale_x_date(labels = scales::date_format("%b"), breaks = "1 month") +
+  scale_color_manual(values = c("Monthly Average" = "blue", 
+                                "Rolling Average (3-mo)" = "red"))
