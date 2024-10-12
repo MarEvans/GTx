@@ -72,3 +72,25 @@ train_sales_data[top5,]
 #df excluding outliers
 outlier_ind <- which(cooks > threshold)
 train_sales_data_cook <- train_sales_data[-outlier_ind,]
+
+model_outlier <- lm(Satisfaction_Score ~ Product_Category + Purchase_Amount + Customer_Gender + Store_Location + Purchase_Month, train_sales_data_cook)
+summary(model_outlier)
+
+## predict satisfaction score
+pred_m1<- predict(model1, test_sales_data[,-8]) #model1
+pred_mo <- predict(model_outlier, test_sales_data[,-8]) #model_outlier
+
+#mean squared prediction error (MSPE)
+mspe <- function(pred, obs){mean((pred - obs)^2)}
+model1_mspe = mspe(pred_m1, test_sales_data[,8])
+outlier_mspe = mspe(pred_mo, test_sales_data[,8]
+
+#adjusted r-squared
+m1_adjr = summary(model1)$adj.r.squared
+outlier_adjr = summary(model_outlier)$adj.r.squared
+
+comp_df<- data.frame( model1 = c(model1_mspe, m1_adjr)
+                      model_outlier = c(outlier_mspe, outlier_adjr)
+                      row.names = c("MSPE", "Adjusted R-squared")
+                      )
+comp_df
