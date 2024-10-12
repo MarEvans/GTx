@@ -1,0 +1,20 @@
+Sales_dataset = read.csv("large_sales_dataset.csv", header=TRUE) #reads data
+Sales_dataset$Product_Category=as.factor(Sales_dataset$Product_Category)
+Sales_dataset$Customer_Gender=as.factor(Sales_dataset$Customer_Gender)
+Sales_dataset$Store_Location=as.factor(Sales_dataset$Store_Location)
+head(Sales_dataset)
+
+##boxplot of the response variable- Satisfaction score- versus the predicting variable- Product category
+ggplot(Sales_dataset, aes(x=as.factor(Product_Category), y=Satisfaction_Score)) + 
+  geom_boxplot(alpha=0.2, outlier.colour="red") + #color outliers red
+  xlab("Product Category") +
+  ylab("Satisfaction Score")
+
+#Perform an ANOVA F-test on the means of Product Category
+anova<- aov(Satisfaction_Score ~ Product_Category, data =Sales_dataset)
+summary(anova)
+
+##perform multiple comparisons for all pairwise levels of the predictor variable 
+TukeyHSD(anova, conf.level = 0.99) #confidence level = 99%
+
+plot (TukeyHSD(anova, conf.level = 0.99))
