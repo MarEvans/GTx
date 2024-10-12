@@ -1,0 +1,26 @@
+#load dataset
+data(mtcars)
+
+#variable type to factor
+mtcars$cyl <- as.factor(mtcars$cyl)
+
+#generate dummy variables
+dummies_cyl <- as.data.frame(model.matrix(~ cyl, data = mtcars)[, -1])
+
+#combine with original dataset
+mtcars1 <- cbind(mtcars, dummies_cyl)
+
+#build MLR model
+model_matrix <- lm(mpg ~ hp + cyl6 + cyl8, data = mtcars1)
+summary(model_matrix)
+
+##preprocessing with as.factor()
+#convert to factor
+mtcars$cyl <- as.factor(mtcars$cyl)
+
+#check reference level
+levels(mtcars$cyl)
+
+#build MLR model
+model_as_factor <- lm(mpg ~  hp + cyl, data = mtcars)
+summary(model_as_factor)
