@@ -1,0 +1,74 @@
+##data preprocessing
+sales_data <- read.csv("large_sales_dataset.csv", header=TRUE)
+
+#convert variable type to factor
+sales_data$Product_Category = as.factor(sales_data$Product_Category)
+sales_data$Customer_Gender = as.factor(sales_data$Customer_Gender)
+sales_data$Store_Location = as.factor(sales_data$Store_Location)
+
+#convert variable type to date
+sales_data$Purchase_Date = as.Date(sales_data$Purchase_Date, format="%m/%d/%Y")
+
+#sort data by satisfaction score in ascending order
+sales_data <- sales_data[order(sales_data$Satisfaction_Score),]
+
+#print first 10 rows
+head(sales_data, 10)
+
+#randomly sample row indices for 80% of the data
+fds_rows<- nrow(sales_data)
+indices<- sample.int(fds_rows, size = ceiling(0.8*fds_rows)) #ceiling function in size argument
+
+#split data into test and train data sets
+test_sales_data <- sales_data[-indices,]
+train_sales_data <- sales_data[indices,]
+
+#sort by purchase date in ascending order
+test_sales_data <- test_sales_data %>% arrange(Purchase_Date)
+train_sales_data <- train_sales_data %>% arrange(Purchase_Date)
+
+#remove row names
+row.names(test_sales_data) <- NULL
+row.names(train_sales_data) <- NULL
+
+#check dimensions
+dim(test_sales_data)
+dim(train_sales_data)
+
+#train MLR model
+model1 <- lm(Satisfaction_Score ~ Product_Category + Purchase_Amount + Customer_Age + Customer_Gender + Store_Location + Purchase_Month, train_sales_data)
+
+summary(model1)
+
+#cook's distances for model1
+cooks<- cooks.distance(model1)
+
+#calculate threshold
+threshold <- 4/nrow(train_sales_data)
+above_threshold = cooks > threshold 
+
+#plot cook's distance
+ggplot(data.frame(x = seq_along(cooks), y = cooks), aes(x, y, fill = above_threshold))+
+  geom_col() +
+  geom_hline(yintercept = threshold, linetype="dashed", lwd = 0.2) +
+  scale_fill_manual(values = c("FALSE" = "grey", "TRUE" = "red")) + # assign red if exceeding threshold
+  labs (title = "Bar Plot of Cook's Distance", subtitle = "model1", x = "index", y = "Cook's Distance") +
+  theme_classic() +
+  theme(legend.position = "none") #remove legend
+
+#output total observations that exceed threshold
+cat("Total observations above threshold:", sum(above_threshold))
+
+#df of outliers
+influential <- cooks[which(cooks > threshold)]
+
+#indices for highest 5 outlier rows
+top5<- as.numeric(names(sort(influential, decreasing = TRUE)))[1:5] #sort in descending order
+top5
+
+#highest 5 outlier rows from train_sales_data
+train_sales_data[top5,]
+
+#df excluding outliers
+outlier_ind <- which(cooks > threshold)
+train_sales_data_cook <- train_sales_data[-outlier_ind,]
