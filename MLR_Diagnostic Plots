@@ -1,0 +1,54 @@
+library(MASS)
+library(gridExtra)
+library(ggplot2)
+
+#standardize residuals
+stdresid = stdres(model1) 
+
+## Linearity assumption
+#scatterplot of response vs predictors
+scat<- ggplot(data, aes(x = , y = )) +
+  geom_point() + 
+  geom_smooth(method = "lm", color = "pink", se = FALSE) +  #add regression line
+  labs(x = "Predictor", y = "Response", title = "Predictor vs Response Variable")
+
+#scatterplot of standardized residuals vs quantatitive predictors
+P1<- ggplot(data = data.frame(Residuals = stdresid, predictor1 = train_data$), aes(predictor1, Residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, color = "blue")+
+  labs(x = "Predictor1", y = "Standardized Residuals", title = "Standardized Residuals vs. ()") +
+  theme_classic()
+
+P2 <- ggplot(data = data.frame(Residuals = stdresid, predictor2 = train_data$), aes(predictor2, Residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, color = "blue")+
+  labs(x = "Predictor2", y = "Standardized Residuals", title = "Standardized Residuals vs. ()") +
+  theme_classic()
+
+grid.arrange(P1, P2, nrow = 1) 
+
+
+## Constant variance / uncorrelated errors assumptions
+#scatter plot of standardized residuals vs fitted values
+ggplot(data = data.frame(Residuals = stdresid, Fits = model1$fitted.values), aes(Fits, Residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, color = "darkgreen") +
+  labs(x = "Fitted Values", y = "Standardized Residuals", title = "Standardized Residuals vs. Fitted Values") +
+  theme_classic()
+
+## Normality Assumption
+#histogram of residuals
+hist<- ggplot(as.data.frame(stdresid), aes(x = stdresid)) +
+  geom_histogram(binwidth = 0.5, color="black",fill="lightblue") + #bin = 0.5
+  labs(x = "Standardized Residuals", y = "Frequency", title = "Histogram of Standardized Residuals")+
+  theme_classic()
+         
+#normal QQ plot with a pointwise confidence envelope
+qq<- ggplot(as.data.frame(stdresid), aes(sample = stdresid)) +
+    stat_qq_band(bandType = "pointwise", fill = "lightblue") +
+    stat_qq_line(color = "blue", linewidth = 0.5) +
+    stat_qq_point(shape= 1, size= 1) +
+    labs(x = "Norm Quantiles", y = "Sample Quantiles", title = "Normal QQ Plot of Standardized Residuals")+
+  theme_classic()
+
+grid.arrange(hist, qq, nrow = 1) 
