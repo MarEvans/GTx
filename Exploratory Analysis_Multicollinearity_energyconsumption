@@ -1,0 +1,111 @@
+library(car)
+
+energy_consumption = read.csv("home_energy_consumption.csv",header=TRUE)
+
+energy_consumption$Type_of_Home=as.factor(energy_consumption$Type_of_Home)
+energy_consumption$Heating_System_Type=as.factor(energy_consumption$Heating_System_Type)
+energy_consumption$Cooling_System_Type=as.factor(energy_consumption$Cooling_System_Type)
+energy_consumption$Ownership_Status=as.factor(energy_consumption$Ownership_Status)
+energy_consumption$Smart_Home_Devices=as.factor(energy_consumption$Smart_Home_Devices)
+energy_consumption$Solar_Panel_Installation=as.factor(energy_consumption$Solar_Panel_Installation)
+
+#Dividing the dataset into training and testing datasets
+testRows = sample(nrow(energy_consumption),0.2*nrow(energy_consumption))
+testData = energy_consumption[testRows, ]
+trainData = energy_consumption[-testRows, ]
+row.names(trainData) <- NULL
+head(trainData) #display train data
+
+##Exploratory Analysis
+
+#home type with the highest average monthly energy consumption
+highest_monthly <- energy_consumption %>% group_by(Type_of_Home) %>%
+  mutate(type_monthly = mean(Monthly_Energy_Consumption))
+
+highest_monthly[which.max(highest_monthly$type_monthly),]
+
+#boxplot showing the distribution of monthly energy consumption across different types of heating systems
+ggplot(energy_consumption, aes(x = Heating_System_Type, y = Monthly_Energy_Consumption)) + 
+  geom_boxplot(alpha=0.2, outlier.colour="red") + #color outliers red
+  labs(title = "Box Plot: Monthly Energy Consumption vs. Heating System Type ", x = "Heating System Type", y = "Monthly Energy Consumption") +
+  theme_classic()
+
+#scatterplot of response vs predictors (Household size, Household income, Work from home frequency)
+scat1<- ggplot(energy_consumption, aes(x = Household_Size, y = Monthly_Energy_Consumption)) +
+  geom_point() + 
+  geom_smooth(method = "lm", color = "pink", se = FALSE) +  #add regression line
+  labs(x = "Household Size", y = "Monthly Energy Consumption", title = "Household Size vs Monthly Energy Consumption")
+
+scat2<- ggplot(energy_consumption, aes(x = Household_Income, y = Monthly_Energy_Consumption)) +
+  geom_point() + 
+  geom_smooth(method = "lm", color = "pink", se = FALSE) +  #add regression line
+  labs(x = "Household_Income", y = "Monthly Energy Consumption", title = "Household Income vs Monthly Energy Consumption")
+
+scat3<- ggplot(energy_consumption, aes(x = Work_from_Home_Frequency, y = Monthly_Energy_Consumption)) +
+  geom_point() + 
+  geom_smooth(method = "lm", color = "pink", se = FALSE) +  #add regression line
+  labs(x = "Work from Home Frequency", y = "Monthly Energy Consumption", title = "Work from Home Frequency vs Monthly Energy Consumption")
+
+grid.arrange(scat1, scat2, scat3, nrow = 1) 
+
+# correlation coefficients
+cat("Household size correlation coefficient:", cor(energy_consumption$Household_Size, energy_consumption$Monthly_Energy_Consumption))
+cat("Household income correlation coefficient:", cor(energy_consumption$Household_Income, energy_consumption$Monthly_Energy_Consumption))
+cat("Work from home frequency correlation coefficient:", cor(energy_consumption$Work_from_Home_Frequency, energy_consumption$Monthly_Energy_Consumption))
+
+#change baseline for Heating_System_Type to solar
+trainData$Heating_System_Type <- relevel(trainData$Heating_System_Type, ref = "Solar")
+levels(trainData$Heating_System_Type)
+
+#build MLR model with all predictors
+model2 <- lm(Monthly_Energy_Consumption~., trainData)
+summary(model2)
+
+#statistically insignificant at an alpha level of 0.01
+which(summary(model2)$coeff[,4]> 0.01)
+
+#standardize residuals
+stdresid = stdres(model2) 
+
+## Constant variance / uncorrelated errors assumptions
+#scatter plot of standardized residuals vs fitted values
+ggplot(data = data.frame(Residuals = stdresid, Fits = model2$fitted.values), aes(Fits, Residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, color = "darkgreen") +
+  labs(x = "Fitted Values", y = "Standardized Residuals", title = "Standardized Residuals vs. Fitted Values") +
+  theme_classic()
+
+## Normality Assumption
+#histogram of residuals
+hist<- ggplot(as.data.frame(stdresid), aes(x = stdresid)) +
+  geom_histogram(binwidth = 0.5, color="black",fill="lightblue") + #bin = 0.5
+  labs(x = "Standardized Residuals", y = "Frequency", title = "Histogram of Standardized Residuals")+
+  theme_classic()
+         
+#normal QQ plot with a pointwise confidence envelope
+qq<- ggplot(as.data.frame(stdresid), aes(sample = stdresid)) +
+    stat_qq_band(bandType = "pointwise", fill = "lightblue") +
+    stat_qq_line(color = "blue", linewidth = 0.5) +
+    stat_qq_point(shape= 1, size= 1) +
+    labs(x = "Norm Quantiles", y = "Sample Quantiles", title = "Normal QQ Plot of Standardized Residuals")+
+  theme_classic()
+
+## Multicollinearity test
+#VIF threshold
+cat("VIF threshold:", max(10, 1/(1-summary(model2)$r.squared)))
+
+#compute variance inflation factor of each predictor
+car::vif(model2)
+
+## Model Predictions/ Performance
+pred_m2<- predict(model2, testData[,-13])
+
+mspe <- function(pred, obs){mean((pred - obs)^2)} #mspe function
+mspe_m2<-mspe(pred_m2, testData[,13])
+mspe_m2
+
+# Extract the first row of testData
+row1<- testData[1,]
+
+#99% prediction interval (PI) of the monthly consumption of energy (kWh)
+predict(model2, row1[-13], interval = "prediction", level = 0.99)
